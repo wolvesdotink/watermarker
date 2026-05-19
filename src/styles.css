@@ -1,0 +1,990 @@
+:root {
+  color-scheme: light dark;
+
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+    system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "ss01", "kern";
+
+  /* ----- Light mode (Liquid Glass defaults) ----- */
+  --text:           rgba(0, 0, 0, 0.88);
+  --text-muted:     rgba(0, 0, 0, 0.55);
+  --text-faint:     rgba(0, 0, 0, 0.38);
+  --hairline:       rgba(0, 0, 0, 0.08);
+  --hairline-strong:rgba(0, 0, 0, 0.14);
+
+  --canvas-tint:    rgba(245, 245, 247, 0.45);
+
+  /* Glass material for cards (sits on top of NSVisualEffectView) */
+  --glass-fill:     rgba(255, 255, 255, 0.55);
+  --glass-fill-hi:  rgba(255, 255, 255, 0.78);
+  --glass-edge:     rgba(255, 255, 255, 0.7);
+  --glass-spec:     rgba(255, 255, 255, 0.85);   /* top specular highlight */
+  --glass-base:     rgba(0, 0, 0, 0.04);         /* bottom inner shadow */
+
+  /* Float shadows */
+  --shadow-card:
+    0 1px 1px rgba(0, 0, 0, 0.04),
+    0 2px 4px rgba(0, 0, 0, 0.04),
+    0 12px 24px rgba(0, 0, 0, 0.06);
+
+  /* Row hover/press tints */
+  --row-hover:      rgba(0, 0, 0, 0.035);
+  --row-press:      rgba(0, 0, 0, 0.07);
+
+  --accent:         #007aff;
+  --accent-hi:      #0a84ff;
+  --accent-lo:      #006fdb;
+  --accent-glow:    rgba(0, 122, 255, 0.30);
+  --danger:         #ff3b30;
+  --ok:             #30b04a;
+
+  --radius-card:    14px;
+  --radius-control: 10px;
+  --radius-pill:    9999px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text:           rgba(255, 255, 255, 0.92);
+    --text-muted:     rgba(255, 255, 255, 0.55);
+    --text-faint:     rgba(255, 255, 255, 0.38);
+    --hairline:       rgba(255, 255, 255, 0.08);
+    --hairline-strong:rgba(255, 255, 255, 0.16);
+
+    --canvas-tint:    rgba(18, 18, 20, 0.50);
+
+    --glass-fill:     rgba(60, 60, 64, 0.40);
+    --glass-fill-hi:  rgba(70, 70, 76, 0.55);
+    --glass-edge:     rgba(255, 255, 255, 0.10);
+    --glass-spec:     rgba(255, 255, 255, 0.16);
+    --glass-base:     rgba(0, 0, 0, 0.30);
+
+    --shadow-card:
+      0 1px 1px rgba(0, 0, 0, 0.18),
+      0 2px 4px rgba(0, 0, 0, 0.15),
+      0 14px 28px rgba(0, 0, 0, 0.20);
+
+    --row-hover:      rgba(255, 255, 255, 0.05);
+    --row-press:      rgba(255, 255, 255, 0.09);
+
+    --accent:         #0a84ff;
+    --accent-hi:      #2a94ff;
+    --accent-lo:      #0066d6;
+    --accent-glow:    rgba(10, 132, 255, 0.45);
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  overflow: hidden;
+  background: transparent; /* let NSVisualEffectView vibrancy show */
+  color: var(--text);
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: default;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Components below set `display: flex`, which overrides the implicit `display: none`
+   from the [hidden] attribute. Restore it explicitly. */
+[hidden] { display: none !important; }
+
+/* ============================================================
+   Layout
+   ============================================================ */
+
+.app {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  height: 100vh;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Slight inner shadow on the right edge gives the sidebar a sense of depth
+     against the brighter canvas. */
+  box-shadow: inset -0.5px 0 0 var(--hairline);
+}
+
+.titlebar {
+  position: relative;
+  height: 38px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px 0 78px; /* clear traffic lights on the left */
+}
+.titlebar-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.titlebar-button {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--text-muted);
+  transition: background 0.08s ease, color 0.08s ease;
+}
+.titlebar-button:hover  { background: var(--row-hover);  color: var(--text); }
+.titlebar-button:active { background: var(--row-press); }
+.titlebar-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.gear-icon {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+.titlebar-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1.5px var(--canvas-tint, transparent),
+              0 0 0 3px var(--accent-glow);
+  pointer-events: none;
+}
+
+.sidebar-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 4px 16px 16px;
+  display: block; /* rely on explicit margins, not flex gap, for predictable rhythm */
+}
+.sidebar-scroll::-webkit-scrollbar { width: 0; }
+
+.sidebar-footer {
+  flex: 0 0 auto;
+  padding: 14px 16px 18px;
+  border-top: 0.5px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ============================================================
+   Group titles  (small-caps section labels — System Settings style)
+   ============================================================ */
+
+.group-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 18px 6px 8px;
+}
+.group-title:first-child { margin-top: 6px; }
+
+/* ============================================================
+   Glass card  (the Liquid Glass material)
+   ============================================================ */
+
+.card {
+  position: relative;
+  background: var(--glass-fill);
+  backdrop-filter: blur(36px) saturate(180%);
+  -webkit-backdrop-filter: blur(36px) saturate(180%);
+  border: 0.5px solid var(--glass-edge);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  isolation: isolate;
+}
+/* Specular highlight along the top edge — gives the "lit-from-above" glass feel. */
+.card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 12px; right: 12px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--glass-spec) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+  border-radius: var(--radius-card);
+}
+/* Soft inner refraction at the bottom for depth. */
+.card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 -1px 0 var(--glass-base);
+}
+
+/* ============================================================
+   Rows inside cards
+   ============================================================ */
+
+.row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  padding: 11px 14px;
+  min-height: 44px; /* matches macOS Settings row metrics */
+  position: relative;
+  transition: background 0.08s ease;
+}
+button.row { padding: 11px 14px; }
+button.row:hover  { background: var(--row-hover); }
+button.row:active { background: var(--row-press); }
+
+/* Hairline between rows — inset on the left like macOS Settings (lines up with
+   the start of the label text, not the card edge). */
+.row-sep {
+  height: 0.5px;
+  background: var(--hairline);
+  margin-left: 14px;
+  margin-right: 0;
+}
+
+/* Picker rows: grid of label / value / chevron */
+.picker {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+.row-label {
+  font-size: 12.5px;
+  color: var(--text);
+  font-weight: 500;
+}
+.row-value {
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  unicode-bidi: plaintext;
+}
+.row-value:empty::before {
+  content: attr(data-empty);
+  color: var(--text-faint);
+  font-family: inherit;
+}
+.row-chevron {
+  color: var(--text-faint);
+  font-size: 16px;
+  line-height: 1;
+  font-weight: 300;
+  transform: translateY(-1px);
+}
+
+button.row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* ============================================================
+   Slider rows
+   ============================================================ */
+
+.slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  min-height: 0;
+}
+.slider-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.slider-head label {
+  font-size: 12.5px;
+  color: var(--text);
+  font-weight: 500;
+}
+.slider-head .val {
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 18px;
+  background: transparent;
+  cursor: default;
+  margin: 0;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--hairline-strong);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 30%, #ffffff 0%, #f4f4f6 70%);
+  border: 0.5px solid rgba(0, 0, 0, 0.15);
+  margin-top: -6px;
+  box-shadow:
+    inset 0 0.5px 0 rgba(255, 255, 255, 1),
+    0 1px 2px rgba(0, 0, 0, 0.18),
+    0 2px 5px rgba(0, 0, 0, 0.12);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+input[type="range"]:hover::-webkit-slider-thumb {
+  transform: scale(1.05);
+}
+input[type="range"]:active::-webkit-slider-thumb {
+  transform: scale(1.10);
+  box-shadow:
+    inset 0 0.5px 0 rgba(255, 255, 255, 1),
+    0 2px 6px rgba(0, 0, 0, 0.25);
+}
+input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    inset 0 0.5px 0 rgba(255, 255, 255, 1),
+    0 1px 2px rgba(0, 0, 0, 0.18),
+    0 0 0 4px var(--accent-glow);
+}
+input[type="range"]:focus { outline: none; }
+
+/* ============================================================
+   Position picker  (glass tiles)
+   ============================================================ */
+
+.position-card {
+  padding: 0;
+}
+.position-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  aspect-ratio: 3 / 2;
+  /* The card's own border-radius + overflow:hidden clip the grid corners,
+     so the active cell's tint extends cleanly to the card edge. */
+}
+.position-grid button {
+  position: relative;
+  cursor: default;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s ease;
+}
+.position-grid button::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  transition: background 0.1s ease, transform 0.1s ease,
+    box-shadow 0.1s ease;
+}
+.position-grid button:hover {
+  background: var(--row-hover);
+}
+.position-grid button:hover::after {
+  background: var(--text-muted);
+}
+.position-grid button.active {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 18%, transparent),
+    color-mix(in srgb, var(--accent) 10%, transparent)
+  );
+}
+.position-grid button.active::after {
+  background: var(--accent);
+  transform: scale(1.4);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+/* Internal hairlines (between cells only) */
+.position-grid button:not(:nth-child(3n)) {
+  border-right: 0.5px solid var(--hairline);
+}
+.position-grid button:nth-child(n + 4) {
+  border-top: 0.5px solid var(--hairline);
+}
+
+/* ============================================================
+   Primary "Run" button  (accent-tinted glass)
+   ============================================================ */
+
+.run {
+  position: relative;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: var(--radius-control);
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: -0.002em;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 95%, white 5%) 0%,
+    var(--accent) 60%,
+    var(--accent-lo) 100%
+  );
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 0.5px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow:
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.45),  /* top specular */
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.12),
+    0 1px 1px rgba(0, 0, 0, 0.06),
+    0 4px 12px var(--accent-glow);
+  transition: filter 0.1s ease, transform 0.04s ease;
+}
+.run:hover:not(:disabled)  { filter: brightness(1.06); }
+.run:active:not(:disabled) { filter: brightness(0.96); transform: translateY(0.5px); }
+.run:focus-visible {
+  outline: none;
+  box-shadow:
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -0.5px 0 rgba(0, 0, 0, 0.12),
+    0 0 0 4px var(--accent-glow);
+}
+.run:disabled {
+  opacity: 0.55;
+  filter: saturate(0.6);
+}
+
+/* ============================================================
+   Status + progress
+   ============================================================ */
+
+.status {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  min-height: 14px;
+  font-variant-numeric: tabular-nums;
+  word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.status.err { color: var(--danger); }
+.status.ok  { color: var(--ok); }
+
+progress {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border: none;
+  border-radius: 2px;
+  background: var(--hairline-strong);
+  overflow: hidden;
+}
+progress::-webkit-progress-bar {
+  background: var(--hairline-strong);
+  border-radius: 2px;
+}
+progress::-webkit-progress-value {
+  background: linear-gradient(90deg, var(--accent-hi), var(--accent));
+  border-radius: 2px;
+  transition: width 0.12s ease;
+}
+
+/* ============================================================
+   Canvas / preview
+   ============================================================ */
+
+.canvas {
+  background: var(--canvas-tint);
+  display: flex;
+  overflow: hidden;
+}
+.canvas-inner {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  position: relative;
+}
+.canvas img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 8px;
+  box-shadow:
+    0 24px 56px rgba(0, 0, 0, 0.22),
+    0 4px 12px rgba(0, 0, 0, 0.10),
+    0 0 0 0.5px var(--hairline-strong);
+}
+
+/* Floating glass loader in the top-right corner of the canvas.
+   Opacity-driven (not [hidden]) so we can fade it in/out smoothly. */
+.canvas-loader {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 15px;
+  background: var(--glass-fill-hi);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 0.5px solid var(--glass-edge);
+  box-shadow:
+    inset 0 0.5px 0 var(--glass-spec),
+    inset 0 -0.5px 0 var(--glass-base),
+    0 4px 14px rgba(0, 0, 0, 0.10);
+  color: var(--text-muted);
+  opacity: 0;
+  transform: scale(0.92);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  pointer-events: none;
+}
+.canvas-loader.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-top-color: currentColor;
+  animation: spinner-rotate 0.7s linear infinite;
+}
+@keyframes spinner-rotate {
+  to { transform: rotate(360deg); }
+}
+
+.placeholder {
+  text-align: center;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 320px;
+}
+.placeholder-glass {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: var(--glass-fill);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 0.5px solid var(--glass-edge);
+  box-shadow:
+    inset 0 0.5px 0 var(--glass-spec),
+    inset 0 -0.5px 0 var(--glass-base),
+    0 8px 20px rgba(0, 0, 0, 0.10);
+  margin-bottom: 4px;
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+.placeholder-glyph {
+  width: 28px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1.5px solid var(--text-faint);
+  position: relative;
+}
+.placeholder-glyph::before {
+  content: "";
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  top: 3px;
+  right: 3px;
+}
+.placeholder-glyph::after {
+  content: "";
+  position: absolute;
+  bottom: -1.5px;
+  left: -1.5px;
+  right: -1.5px;
+  height: 9px;
+  background:
+    linear-gradient(45deg, transparent 50%, var(--text-faint) 50%) bottom left / 50% 100% no-repeat,
+    linear-gradient(-45deg, transparent 50%, var(--text-faint) 50%) bottom right / 50% 100% no-repeat;
+  border-radius: 0 0 3px 3px;
+}
+.placeholder-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.placeholder-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ============================================================
+   Update card
+   ============================================================ */
+
+.update-card .update-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.update-status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.update-label {
+  font-size: 12.5px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.update-version {
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.update-version:empty { display: none; }
+
+/* Tinted dot to the left of the label for the available/error states. */
+.update-card[data-state="available"] .update-label::before,
+.update-card[data-state="ready"] .update-label::before,
+.update-card[data-state="error"] .update-label::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: 1px;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.update-card[data-state="ready"] .update-label::before {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 24%, transparent);
+}
+.update-card[data-state="error"] .update-label::before {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 24%, transparent);
+}
+
+.update-action {
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--glass-fill-hi);
+  border: 0.5px solid var(--hairline-strong);
+  cursor: default;
+  transition: background 0.08s ease, filter 0.08s ease;
+}
+.update-action:hover:not(:disabled)  { background: var(--row-press); }
+.update-action:active:not(:disabled) { filter: brightness(0.96); }
+.update-action:disabled              { opacity: 0.55; cursor: default; }
+
+.update-card[data-state="available"] .update-action,
+.update-card[data-state="ready"] .update-action {
+  color: #ffffff;
+  background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow: 0 1px 2px var(--accent-glow);
+}
+
+.update-progress-wrap {
+  padding: 0 14px 12px;
+}
+.update-progress-wrap progress { display: block; }
+
+.update-notes {
+  padding: 0 14px 12px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.update-card[data-state="error"] .update-notes {
+  color: color-mix(in srgb, var(--danger) 80%, var(--text-muted));
+}
+
+.update-toggle-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+  cursor: default;
+}
+
+/* Compact iOS-style switch */
+.toggle {
+  position: relative;
+  display: inline-block;
+  width: 32px;
+  height: 19px;
+  flex-shrink: 0;
+}
+.toggle input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  margin: 0;
+  cursor: default;
+}
+.toggle-switch {
+  position: absolute;
+  inset: 0;
+  background: var(--hairline-strong);
+  border-radius: var(--radius-pill);
+  transition: background 0.15s ease;
+}
+.toggle-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s ease;
+}
+.toggle input:checked + .toggle-switch {
+  background: var(--accent);
+}
+.toggle input:checked + .toggle-switch::after {
+  transform: translateX(13px);
+}
+.toggle input:focus-visible + .toggle-switch {
+  box-shadow: 0 0 0 4px var(--accent-glow);
+}
+
+.app-version {
+  text-align: center;
+  font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  padding: 8px 0 4px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* ============================================================
+   Sidebar update banner  (compact pill, only shown when
+   there's something update-related the user might act on)
+   ============================================================ */
+
+.update-banner {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px 7px 11px;
+  border-radius: var(--radius-control);
+  background: var(--glass-fill);
+  border: 0.5px solid var(--hairline-strong);
+  box-shadow: var(--shadow-card);
+  color: var(--text);
+  text-align: left;
+  transition: background 0.08s ease, filter 0.08s ease;
+}
+.update-banner:hover  { filter: brightness(1.02); background: var(--glass-fill-hi); }
+.update-banner:active { filter: brightness(0.97); }
+.update-banner:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.update-banner-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.update-banner[data-state="ready"] .update-banner-dot {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 24%, transparent);
+}
+.update-banner[data-state="downloading"] .update-banner-dot {
+  background: var(--text-muted);
+  box-shadow: none;
+  animation: banner-dot-pulse 1.1s ease-in-out infinite;
+}
+@keyframes banner-dot-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
+.update-banner-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.update-banner-chevron {
+  color: var(--text-faint);
+  font-size: 14px;
+  line-height: 1;
+  font-weight: 300;
+  transform: translateY(-1px);
+}
+
+/* ============================================================
+   Settings drawer  (slide-out from the right)
+   ============================================================ */
+
+.settings-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+}
+.settings-drawer[aria-hidden="false"] {
+  pointer-events: auto;
+}
+
+.settings-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+@media (prefers-color-scheme: dark) {
+  .settings-backdrop { background: rgba(0, 0, 0, 0.42); }
+}
+.settings-drawer[aria-hidden="false"] .settings-backdrop {
+  opacity: 1;
+}
+
+.settings-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  background: var(--glass-fill-hi);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border-left: 0.5px solid var(--glass-edge);
+  box-shadow:
+    inset 0 0.5px 0 var(--glass-spec),
+    -8px 0 28px rgba(0, 0, 0, 0.18);
+  transform: translateX(100%);
+  transition: transform 0.26s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.settings-drawer[aria-hidden="false"] .settings-panel {
+  transform: translateX(0);
+}
+
+.settings-header {
+  flex: 0 0 auto;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px 0 16px;
+  border-bottom: 0.5px solid var(--hairline);
+}
+.settings-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--text);
+}
+.settings-close {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--text-muted);
+  transition: background 0.08s ease, color 0.08s ease;
+}
+.settings-close:hover  { background: var(--row-hover);  color: var(--text); }
+.settings-close:active { background: var(--row-press); }
+.settings-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.settings-close svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+}
+
+.settings-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 4px 16px 16px;
+}
+.settings-scroll::-webkit-scrollbar { width: 0; }
+.settings-scroll .group-title:first-child { margin-top: 10px; }
+
+/* Hide native focus rings we don't want */
+:focus { outline: none; }
+:focus-visible { outline: none; }

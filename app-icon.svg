@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#4A4A52"/>
+      <stop offset="100%" stop-color="#1F1F24"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#EFEFF1"/>
+    </linearGradient>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#AEAEB5"/>
+      <stop offset="100%" stop-color="#727279"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="55%"  stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="24"/>
+    </filter>
+    <clipPath id="photoClip">
+      <rect x="172" y="172" width="680" height="680" rx="44"/>
+    </clipPath>
+  </defs>
+
+  <rect width="1024" height="1024" rx="228" fill="url(#bg)"/>
+  <rect x="6" y="6" width="1012" height="1012" rx="222" fill="url(#rim)" opacity="0.6"/>
+
+  <g transform="translate(0 28)">
+    <rect x="172" y="172" width="680" height="680" rx="44"
+          fill="#000000" opacity="0.45" filter="url(#cardShadow)"/>
+  </g>
+
+  <rect x="172" y="172" width="680" height="680" rx="44" fill="url(#paper)"/>
+
+  <g clip-path="url(#photoClip)">
+    <rect x="172" y="172" width="680" height="680" fill="url(#sky)"/>
+
+    <circle cx="700" cy="320" r="124" fill="#FFFFFF" fill-opacity="0.08"/>
+    <circle cx="700" cy="320" r="68"  fill="#FFFFFF" fill-opacity="0.94"/>
+
+    <path d="M172 852 L320 520 L470 640 L600 460 L730 580 L852 510 L852 852 Z"
+          fill="#3A3A40"/>
+    <path d="M172 852 L260 640 L420 720 L540 580 L680 700 L852 630 L852 852 Z"
+          fill="#52525A"/>
+
+    <g transform="translate(512 512) rotate(-18)">
+      <circle r="208" fill="#FFFFFF" fill-opacity="0.16"
+              stroke="#FFFFFF" stroke-width="8" stroke-opacity="0.85"/>
+      <text x="0" y="84" text-anchor="middle"
+            font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+            font-weight="900" font-style="italic" font-size="252"
+            fill="#FFFFFF" fill-opacity="0.96">W</text>
+    </g>
+  </g>
+</svg>
