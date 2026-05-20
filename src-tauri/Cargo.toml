@@ -22,6 +22,12 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png",
 resvg = "0.44"
 tiny-skia = "0.11"
 base64 = "0.22"
+rayon = "1"
+num_cpus = "1"
+# Used only for the preview path: gives us 1/8, 1/4, 1/2 scale-on-decode which
+# image-rs's zune_jpeg backend no longer exposes. Batch output still goes
+# through the `image` crate to keep encode behavior identical.
+jpeg-decoder = "0.3"
 
 [target."cfg(target_os = \"macos\")".dependencies]
 window-vibrancy = "0.5"

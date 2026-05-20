@@ -347,6 +347,12 @@ button.row:focus-visible {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
+.slider-row .row-hint {
+  font-size: 11px;
+  color: var(--text-faint);
+  line-height: 1.35;
+  margin-top: -2px;
+}
 
 input[type="range"] {
   -webkit-appearance: none;

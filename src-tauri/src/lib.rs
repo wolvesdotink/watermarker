@@ -1,13 +1,135 @@
 pub mod commands;
 pub mod pipeline;
 
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::SystemTime;
 
-use base64::Engine;
-use image::ImageEncoder;
+use image::codecs::jpeg::JpegEncoder;
+use image::{DynamicImage, ExtendedColorType, ImageEncoder, RgbaImage};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_dialog::DialogExt;
+
+// Quality used for the on-the-fly preview JPEG. Independent of the user-facing
+// batch quality slider — preview just needs to look right at 720 px.
+const PREVIEW_JPEG_QUALITY: u8 = 80;
+
+// Single-slot caches keyed on (path, mtime, max_dim). Reusing a decoded photo
+// across slider drags drops most of the per-update cost; we re-decode only on
+// folder change, file edit, or preview size change.
+struct PreviewCache {
+    photo: Option<CachedPhoto>,
+    watermark: Option<CachedWatermark>,
+}
+
+struct CachedPhoto {
+    path: PathBuf,
+    mtime: SystemTime,
+    max_dim: u32,
+    thumb: Arc<DynamicImage>,
+}
+
+struct CachedWatermark {
+    path: PathBuf,
+    mtime: SystemTime,
+    source: Arc<pipeline::WatermarkSource>,
+}
+
+static PREVIEW_CACHE: OnceLock<Mutex<PreviewCache>> = OnceLock::new();
+
+fn preview_cache() -> &'static Mutex<PreviewCache> {
+    PREVIEW_CACHE.get_or_init(|| {
+        Mutex::new(PreviewCache {
+            photo: None,
+            watermark: None,
+        })
+    })
+}
+
+fn mtime_of(path: &Path) -> SystemTime {
+    fs::metadata(path)
+        .and_then(|m| m.modified())
+        .unwrap_or(SystemTime::UNIX_EPOCH)
+}
+
+fn cached_photo_thumb(path: &Path, max_dim: u32) -> Result<Arc<DynamicImage>, String> {
+    let mtime = mtime_of(path);
+    if let Ok(lock) = preview_cache().lock() {
+        if let Some(entry) = &lock.photo {
+            if entry.path == path && entry.mtime == mtime && entry.max_dim == max_dim {
+                return Ok(entry.thumb.clone());
+            }
+        }
+    }
+    let img = pipeline::open_photo_scaled(path, max_dim)?;
+    let thumb = Arc::new(img.thumbnail(max_dim, max_dim));
+    if let Ok(mut lock) = preview_cache().lock() {
+        lock.photo = Some(CachedPhoto {
+            path: path.to_path_buf(),
+            mtime,
+            max_dim,
+            thumb: thumb.clone(),
+        });
+    }
+    Ok(thumb)
+}
+
+fn cached_watermark(path: &Path) -> Result<Arc<pipeline::WatermarkSource>, String> {
+    let mtime = mtime_of(path);
+    if let Ok(lock) = preview_cache().lock() {
+        if let Some(entry) = &lock.watermark {
+            if entry.path == path && entry.mtime == mtime {
+                return Ok(entry.source.clone());
+            }
+        }
+    }
+    let src = Arc::new(pipeline::WatermarkSource::load(path)?);
+    if let Ok(mut lock) = preview_cache().lock() {
+        lock.watermark = Some(CachedWatermark {
+            path: path.to_path_buf(),
+            mtime,
+            source: src.clone(),
+        });
+    }
+    Ok(src)
+}
+
+/// Encode an RGBA buffer as JPEG, flattening alpha onto a white background.
+/// Watermarked composites are almost entirely opaque (alpha=255) so the slow
+/// blend path runs only on the watermark's anti-aliased edges.
+fn encode_preview_jpeg(composed: &RgbaImage) -> Result<Vec<u8>, String> {
+    let (w, h) = (composed.width(), composed.height());
+    let pixels = (w as usize) * (h as usize);
+    let mut rgb = Vec::with_capacity(pixels * 3);
+    for chunk in composed.as_raw().chunks_exact(4) {
+        let a = chunk[3];
+        if a == 255 {
+            rgb.push(chunk[0]);
+            rgb.push(chunk[1]);
+            rgb.push(chunk[2]);
+        } else if a == 0 {
+            rgb.push(255);
+            rgb.push(255);
+            rgb.push(255);
+        } else {
+            let a16 = a as u16;
+            let inv = 255 - a16;
+            rgb.push(((chunk[0] as u16 * a16 + 255 * inv + 127) / 255) as u8);
+            rgb.push(((chunk[1] as u16 * a16 + 255 * inv + 127) / 255) as u8);
+            rgb.push(((chunk[2] as u16 * a16 + 255 * inv + 127) / 255) as u8);
+        }
+    }
+    let mut buf = Vec::with_capacity(pixels);
+    let encoder = JpegEncoder::new_with_quality(&mut buf, PREVIEW_JPEG_QUALITY);
+    encoder
+        .write_image(&rgb, w, h, ExtendedColorType::Rgb8)
+        .map_err(|e| format!("encode preview jpeg: {e}"))?;
+    Ok(buf)
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -30,6 +152,14 @@ struct RunArgs {
     opacity: f32,
     margin: i64,
     position: String,
+    /// JPEG output quality (1..=100). Defaults to the pipeline default when
+    /// missing so older frontend builds keep working.
+    #[serde(default = "default_jpeg_quality")]
+    jpeg_quality: u8,
+}
+
+fn default_jpeg_quality() -> u8 {
+    pipeline::DEFAULT_JPEG_QUALITY
 }
 
 #[derive(Serialize, Clone)]
@@ -65,14 +195,14 @@ fn validate_position(p: &str) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn preview(args: PreviewArgs) -> Result<String, String> {
+async fn preview(args: PreviewArgs) -> Result<tauri::ipc::Response, String> {
     validate_position(&args.position)?;
 
     // Image work is CPU-bound; keep it off the async runtime.
-    tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || -> Result<tauri::ipc::Response, String> {
         let folder = PathBuf::from(&args.folder);
         let photos = pipeline::list_photos(&folder);
-        let photo = photos
+        let photo_path = photos
             .first()
             .ok_or_else(|| "No photos in folder".to_string())?;
         let wm_path = PathBuf::from(&args.watermark);
@@ -80,28 +210,18 @@ async fn preview(args: PreviewArgs) -> Result<String, String> {
             return Err("Watermark file not found".into());
         }
 
-        let composed = pipeline::preview_image(
-            photo,
-            &wm_path,
-            args.size,
-            &args.position,
-            args.margin,
-            args.opacity,
-            720,
-        )?;
+        // Cache hits skip both the decode and the SVG parse — the common case
+        // during slider drags.
+        let thumb = cached_photo_thumb(photo_path, 720)?;
+        let source = cached_watermark(&wm_path)?;
 
-        let mut buf = Vec::with_capacity(composed.as_raw().len());
-        image::codecs::png::PngEncoder::new(&mut buf)
-            .write_image(
-                composed.as_raw(),
-                composed.width(),
-                composed.height(),
-                image::ExtendedColorType::Rgba8,
-            )
-            .map_err(|e| format!("png encode: {e}"))?;
+        let target_w = ((thumb.width() as f32 * args.size / 100.0).round() as u32).max(1);
+        let mut wm = pipeline::resize_watermark(&source, target_w)?;
+        pipeline::apply_opacity(&mut wm, args.opacity);
+        let composed = pipeline::compose(&thumb, &wm, &args.position, args.margin);
 
-        let b64 = base64::engine::general_purpose::STANDARD.encode(&buf);
-        Ok(format!("data:image/png;base64,{b64}"))
+        let bytes = encode_preview_jpeg(&composed)?;
+        Ok(tauri::ipc::Response::new(bytes))
     })
     .await
     .map_err(|e| format!("preview task: {e}"))?
@@ -130,31 +250,20 @@ async fn count_photos(args: CountArgs) -> usize {
 }
 
 /// Returns just the first photo in the folder (recursively) as a thumbnailed
-/// PNG data URL — used to populate the canvas before a watermark is chosen.
+/// JPEG — used to populate the canvas before a watermark is chosen.
 #[tauri::command]
-async fn photo_preview(args: PhotoPreviewArgs) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
+async fn photo_preview(args: PhotoPreviewArgs) -> Result<tauri::ipc::Response, String> {
+    tauri::async_runtime::spawn_blocking(move || -> Result<tauri::ipc::Response, String> {
         let folder = PathBuf::from(&args.folder);
         let photos = pipeline::list_photos(&folder);
-        let photo = photos
+        let photo_path = photos
             .first()
             .ok_or_else(|| "No photos in folder".to_string())?;
 
-        let img = pipeline::open_photo(photo)?;
-        let thumb = img.thumbnail(720, 720).to_rgba8();
-
-        let mut buf = Vec::with_capacity(thumb.as_raw().len());
-        image::codecs::png::PngEncoder::new(&mut buf)
-            .write_image(
-                thumb.as_raw(),
-                thumb.width(),
-                thumb.height(),
-                image::ExtendedColorType::Rgba8,
-            )
-            .map_err(|e| format!("png encode: {e}"))?;
-
-        let b64 = base64::engine::general_purpose::STANDARD.encode(&buf);
-        Ok(format!("data:image/png;base64,{b64}"))
+        let thumb = cached_photo_thumb(photo_path, 720)?;
+        let rgba = thumb.to_rgba8();
+        let bytes = encode_preview_jpeg(&rgba)?;
+        Ok(tauri::ipc::Response::new(bytes))
     })
     .await
     .map_err(|e| format!("preview task: {e}"))?
@@ -199,40 +308,64 @@ fn run_batch_inner(app: AppHandle, args: RunArgs) {
         return;
     }
 
+    // Parse the watermark once for the whole batch (SVG XML parse + tiny_skia
+    // rasterize would otherwise repeat per photo).
+    let source = match pipeline::WatermarkSource::load(&wm_path) {
+        Ok(s) => s,
+        Err(e) => {
+            emit(RunEvent::Error { message: e });
+            return;
+        }
+    };
+
     let total = photos.len();
     emit(RunEvent::Start { total });
 
-    let mut failures = Vec::new();
-    for (idx, photo) in photos.iter().enumerate() {
-        let i = idx + 1;
-        // Mirror the source's subfolder structure under the output root so that
-        // collisions between same-named files in different subfolders can't
-        // overwrite each other.
+    // Shared, lock-protected resize cache (most folders have 1–2 widths).
+    let cache = pipeline::WatermarkCache::new(8);
+    let done = AtomicUsize::new(0);
+    let failures: Mutex<Vec<Failure>> = Mutex::new(Vec::new());
+
+    photos.par_iter().for_each(|photo| {
+        // Mirror the source's subfolder structure under the output root so
+        // that same-named files in different subfolders don't overwrite each
+        // other.
         let rel = photo.strip_prefix(&folder).unwrap_or(photo.as_path());
         let display_name = rel.to_string_lossy().into_owned();
         let out_path = output.join(rel);
 
-        match pipeline::watermark_photo(
+        let result = pipeline::watermark_photo_with_source(
             photo,
-            &wm_path,
+            &source,
             &out_path,
             args.size,
             &args.position,
             args.margin,
             args.opacity,
-        ) {
-            Ok(()) => emit(RunEvent::Progress {
-                i,
-                name: display_name,
-                ok: true,
-                error: None,
-            }),
-            Err(e) => {
-                failures.push(Failure {
-                    name: display_name.clone(),
-                    error: e.clone(),
+            args.jpeg_quality,
+            Some(&cache),
+        );
+        // `i` is the completion count now (workers finish out of order). The
+        // frontend uses it only to drive the <progress> bar, so monotonicity
+        // is what matters, not strict source-order pairing with `name`.
+        let i = done.fetch_add(1, Ordering::Relaxed) + 1;
+        match result {
+            Ok(()) => {
+                let _ = app.emit("run", RunEvent::Progress {
+                    i,
+                    name: display_name,
+                    ok: true,
+                    error: None,
                 });
-                emit(RunEvent::Progress {
+            }
+            Err(e) => {
+                if let Ok(mut f) = failures.lock() {
+                    f.push(Failure {
+                        name: display_name.clone(),
+                        error: e.clone(),
+                    });
+                }
+                let _ = app.emit("run", RunEvent::Progress {
                     i,
                     name: display_name,
                     ok: false,
@@ -240,7 +373,11 @@ fn run_batch_inner(app: AppHandle, args: RunArgs) {
                 });
             }
         }
-    }
+    });
+
+    let mut failures = failures.into_inner().unwrap_or_default();
+    // Sort for deterministic UX — parallel completion order is non-deterministic.
+    failures.sort_by(|a, b| a.name.cmp(&b.name));
 
     emit(RunEvent::Done {
         total,
@@ -287,6 +424,14 @@ fn default_output_folder() -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Cap rayon's global pool so we don't blow up memory: each worker can
+    // hold a fully-decoded photo (~96 MB for a 24 MP shot). Beyond the
+    // physical perf-core count on Apple Silicon, threads contend for memory
+    // bandwidth rather than gaining throughput.
+    let _ = rayon::ThreadPoolBuilder::new()
+        .num_threads(num_cpus::get_physical().clamp(4, 8))
+        .build_global();
+
     #[allow(unused_mut)]
     let mut builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
 

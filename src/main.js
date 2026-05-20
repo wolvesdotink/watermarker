@@ -5,6 +5,8 @@ import { createUpdater } from "./updater.js";
 
 const $ = (id) => document.getElementById(id);
 
+const JPEG_QUALITY_KEY = "watermarker:jpegQuality";
+
 const state = {
   folder: "",
   watermark: "",
@@ -13,6 +15,7 @@ const state = {
   opacity: 1.0,
   margin: 24,
   position: "bottom-right",
+  jpegQuality: 90,
   photoCount: null, // null = unknown, number = result of count_photos
 };
 
@@ -25,6 +28,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   wireDragRegions();
   await hydrateDefaults();
   wireSliders();
+  wireJpegQuality();
   wirePositions();
   wirePickers();
   wireRun();
@@ -63,6 +67,8 @@ function cacheEls() {
   els.opacityVal = $("opacity-val");
   els.margin = $("margin");
   els.marginVal = $("margin-val");
+  els.jpegQuality = $("jpeg-quality");
+  els.jpegQualityVal = $("jpeg-quality-val");
   els.positions = document.querySelectorAll("#positions button");
   els.run = $("run");
   els.status = $("status");
@@ -109,6 +115,17 @@ async function hydrateDefaults() {
     /* leave empty */
   }
   setPosition("bottom-right");
+
+  // JPEG quality persists across restarts so users don't reset it every launch.
+  try {
+    const stored = parseInt(localStorage.getItem(JPEG_QUALITY_KEY) ?? "", 10);
+    if (Number.isFinite(stored) && stored >= 60 && stored <= 100) {
+      state.jpegQuality = stored;
+      els.jpegQuality.value = String(stored);
+    }
+  } catch {
+    /* private mode or storage denied — keep default */
+  }
 }
 
 function wireSliders() {
@@ -141,6 +158,23 @@ function wireSliders() {
       schedulePreview();
     });
   }
+}
+
+function wireJpegQuality() {
+  if (!els.jpegQuality) return;
+  // Reflect the (possibly hydrated) state value into the readout on load.
+  els.jpegQualityVal.textContent = String(state.jpegQuality);
+  els.jpegQuality.addEventListener("input", () => {
+    const v = Math.round(parseFloat(els.jpegQuality.value));
+    state.jpegQuality = v;
+    els.jpegQualityVal.textContent = String(v);
+    try {
+      localStorage.setItem(JPEG_QUALITY_KEY, String(v));
+    } catch {
+      /* storage unavailable — ignore */
+    }
+    // No schedulePreview(): the preview pipeline doesn't use this value.
+  });
 }
 
 function wirePositions() {
@@ -235,7 +269,9 @@ function renderRunButton() {
 
 function schedulePreview() {
   if (previewTimer) clearTimeout(previewTimer);
-  previewTimer = setTimeout(refreshPreview, 120);
+  // 60ms keeps drag-through feeling live; the previewSeq guard drops any
+  // stale responses that arrive out of order.
+  previewTimer = setTimeout(refreshPreview, 60);
 }
 
 async function refreshPreview() {
@@ -243,7 +279,7 @@ async function refreshPreview() {
   const mySeq = ++previewSeq;
   showLoader();
   try {
-    const dataUrl = state.watermark
+    const bytes = state.watermark
       ? await invoke("preview", {
           args: {
             folder: state.folder,
@@ -257,7 +293,7 @@ async function refreshPreview() {
       : await invoke("photo_preview", { args: { folder: state.folder } });
     if (mySeq !== previewSeq) return;
     hideLoader();
-    showPreview(dataUrl);
+    showPreview(bytes);
   } catch (e) {
     if (mySeq !== previewSeq) return;
     hideLoader();
@@ -282,10 +318,27 @@ function hideLoader() {
   els.canvasLoader?.classList.remove("visible");
 }
 
-function showPreview(src) {
+let previewBlobUrl = null;
+function showPreview(bytes) {
+  // Tauri returns binary Response as ArrayBuffer (or Uint8Array, depending on
+  // runtime version). Wrap in a Blob URL — that avoids the ~33% base64 inflation
+  // and the browser's data-URL decode path. We revoke the previous URL only
+  // after the new image has loaded so we don't yank it out from under the decode.
+  const buf = bytes instanceof ArrayBuffer ? bytes : (bytes && bytes.buffer) || bytes;
+  const blob = new Blob([buf], { type: "image/jpeg" });
+  const url = URL.createObjectURL(blob);
+  const prev = previewBlobUrl;
+  previewBlobUrl = url;
+  if (prev) {
+    els.previewImg.addEventListener(
+      "load",
+      () => URL.revokeObjectURL(prev),
+      { once: true },
+    );
+  }
   els.placeholder.hidden = true;
   els.previewImg.hidden = false;
-  els.previewImg.src = src;
+  els.previewImg.src = url;
 }
 
 function showPlaceholder(title, sub) {
@@ -316,6 +369,7 @@ function wireRun() {
           opacity: state.opacity,
           margin: state.margin,
           position: state.position,
+          jpegQuality: state.jpegQuality,
         },
       });
     } catch (e) {

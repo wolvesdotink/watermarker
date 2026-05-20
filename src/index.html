@@ -126,6 +126,18 @@
             </button>
           </header>
           <div class="settings-scroll">
+            <h2 class="group-title">Output</h2>
+            <div class="card">
+              <div class="row slider-row" data-no-drag>
+                <div class="slider-head">
+                  <label for="jpeg-quality">JPEG quality</label>
+                  <span class="val" id="jpeg-quality-val">90</span>
+                </div>
+                <input type="range" id="jpeg-quality" min="60" max="100" step="1" value="90" />
+                <div class="row-hint">Higher = better detail, larger files. Only affects JPEG output.</div>
+              </div>
+            </div>
+
             <h2 class="group-title">Updates</h2>
             <div class="card update-card" id="update-card" data-state="idle">
               <div class="row update-row">
