@@ -1,11 +1,11 @@
 {
-  "version": "0.1.1-beta.1",
-  "notes": "- Add macOS build and version bump npm scripts\n- Parallelize batch export and add JPEG quality control\n\n**Full changelog:** https://github.com/wolvesdotink/watermarker/compare/v0.1.0...v0.1.1-beta.1",
-  "pub_date": "2026-05-20T09:45:42Z",
+  "version": "0.1.1-beta.2",
+  "notes": "- Add batch failures panel and auto-derive output folder\n- Add macOS build and version bump npm scripts\n- Parallelize batch export and add JPEG quality control\n\n**Full changelog:** https://github.com/wolvesdotink/watermarker/compare/v0.1.0...v0.1.1-beta.2",
+  "pub_date": "2026-05-20T11:26:57Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRSG9EN29tcThreHpBSWVjUURuaTdvUmFPSVRvUWtSKytVZDBoUktnTjMyL1dSK2c1eXBlcFZYSmRDTTZDRzBNc1hWTUJEdmc3LzdTOVRhdUdyQ3VmWUxadjZSb29hM0FjPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc5MjcwMjg5CWZpbGU6V2F0ZXJtYXJrZXIuYXBwLnRhci5negpURTBqV2hQOGpIWC9YNXJiUVBaN2JIK0FHTDRQYVdqdFNqN0NXMlZ2T1BMQ2NJc2trNXY3ZEEyR2J1YkI3K3U0S3B5R3BnYkpGMXNPaXlteEdvZzNBQT09Cg==",
-      "url": "https://github.com/wolvesdotink/watermarker/releases/download/v0.1.1-beta.1/Watermarker.app.tar.gz"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRSG9EN29tcThreDZEa2pqUytrK0wrZGRMTXdtZ0pQQm1SWHhZUEh4WVdnS2Y4US90N3RRbmN5TlZzRXRabytCdHBWUlcwWHU4SU9ZMlA4QXJOWFI5d2JweVhWeGtXTXdJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzc5Mjc2MzcwCWZpbGU6V2F0ZXJtYXJrZXIuYXBwLnRhci5negpSUXh2bFNyYmtVT21ycklMOXBKTFlnSjNjbm9tekpkSERPV0xwdXNJaktpNytseWdQa0hJVHVXcUNOYURmeFg0Vy9VaE83Ykg5Q0RseG1rODVDRVBDdz09Cg==",
+      "url": "https://github.com/wolvesdotink/watermarker/releases/download/v0.1.1-beta.2/Watermarker.app.tar.gz"
     }
   }
 }
