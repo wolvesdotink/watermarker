@@ -11,6 +11,9 @@ const state = {
   folder: "",
   watermark: "",
   output: "",
+  // True until the user explicitly picks an output folder. While true, picking
+  // an input folder auto-sets output to a sibling `<input>-watermarked` dir.
+  outputIsAuto: true,
   size: 20,
   opacity: 1.0,
   margin: 24,
@@ -32,6 +35,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   wirePositions();
   wirePickers();
   wireRun();
+  wireFailuresPanel();
   await listenRunEvents();
   wireSettingsDrawer();
   wireUpdater();
@@ -85,6 +89,11 @@ function cacheEls() {
   els.settingsBadge = $("settings-badge");
   els.updateBanner = $("update-banner");
   els.updateBannerLabel = $("update-banner-label");
+  els.failuresPanel = $("failures-panel");
+  els.failuresCount = $("failures-count");
+  els.failuresList = $("failures-list");
+  els.failuresCopy = $("failures-copy");
+  els.failuresClose = $("failures-close");
 }
 
 function wireSettingsDrawer() {
@@ -108,12 +117,8 @@ function wireSettingsDrawer() {
 }
 
 async function hydrateDefaults() {
-  try {
-    state.output = await invoke("default_output_folder");
-    setPickerPath(els.pickOutput, state.output);
-  } catch {
-    /* leave empty */
-  }
+  // Output stays blank until the user picks an input folder — at which point
+  // it auto-fills to `<input>-watermarked`. See input picker.
   setPosition("bottom-right");
 
   // JPEG quality persists across restarts so users don't reset it every launch.
@@ -199,6 +204,10 @@ function wirePickers() {
     if (path) {
       state.folder = path;
       setPickerPath(els.pickFolder, path);
+      if (state.outputIsAuto) {
+        state.output = `${path}-watermarked`;
+        setPickerPath(els.pickOutput, state.output);
+      }
       refreshFolderCount();
       schedulePreview();
     }
@@ -217,6 +226,7 @@ function wirePickers() {
     const path = await invoke("pick_folder");
     if (path) {
       state.output = path;
+      state.outputIsAuto = false;
       setPickerPath(els.pickOutput, path);
     }
   });
@@ -386,6 +396,7 @@ async function listenRunEvents() {
     if (p.type === "start") {
       els.progress.max = p.total;
       els.progress.value = 0;
+      hideFailuresPanel();
       setStatus(`Starting · 0 of ${p.total}`);
     } else if (p.type === "progress") {
       els.progress.value = p.i;
@@ -395,6 +406,7 @@ async function listenRunEvents() {
       renderRunButton();
       if (p.failures.length) {
         setStatus(`Finished with ${p.failures.length} error(s)`, "err");
+        showFailuresPanel(p.failures);
       } else {
         setStatus(`Finished ${p.total} photo${p.total === 1 ? "" : "s"}`, "ok");
       }
@@ -408,6 +420,51 @@ async function listenRunEvents() {
 function setStatus(msg, kind) {
   els.status.textContent = msg;
   els.status.className = "status" + (kind ? " " + kind : "");
+}
+
+let currentFailures = [];
+function wireFailuresPanel() {
+  els.failuresClose?.addEventListener("click", hideFailuresPanel);
+  els.failuresCopy?.addEventListener("click", async () => {
+    if (!currentFailures.length) return;
+    const text = currentFailures.map((f) => `${f.name}\t${f.error}`).join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      const btn = els.failuresCopy;
+      const prev = btn.textContent;
+      btn.textContent = "Copied";
+      setTimeout(() => { btn.textContent = prev; }, 1200);
+    } catch {
+      /* clipboard denied — leave button as-is */
+    }
+  });
+}
+
+function showFailuresPanel(failures) {
+  currentFailures = failures;
+  els.failuresCount.textContent = `${failures.length} photo${failures.length === 1 ? "" : "s"}`;
+  els.failuresList.replaceChildren(
+    ...failures.map((f) => {
+      const li = document.createElement("li");
+      li.className = "failures-item";
+      const name = document.createElement("div");
+      name.className = "failures-name";
+      name.textContent = f.name;
+      const err = document.createElement("div");
+      err.className = "failures-error";
+      err.textContent = f.error;
+      li.append(name, err);
+      return li;
+    }),
+  );
+  els.failuresPanel.hidden = false;
+}
+
+function hideFailuresPanel() {
+  if (!els.failuresPanel) return;
+  els.failuresPanel.hidden = true;
+  els.failuresList.replaceChildren();
+  currentFailures = [];
 }
 
 function wireUpdater() {

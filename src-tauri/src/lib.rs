@@ -415,13 +415,6 @@ async fn pick_watermark_file(app: AppHandle) -> Option<String> {
     .flatten()
 }
 
-#[tauri::command]
-fn default_output_folder() -> String {
-    std::env::current_dir()
-        .map(|p| p.join("watermarked").to_string_lossy().into_owned())
-        .unwrap_or_else(|_| "watermarked".to_string())
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Cap rayon's global pool so we don't blow up memory: each worker can
@@ -469,7 +462,6 @@ pub fn run() {
             run_batch,
             pick_folder,
             pick_watermark_file,
-            default_output_folder,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             commands::updater::watermarker_updater_check,
             #[cfg(not(any(target_os = "android", target_os = "ios")))]

@@ -111,6 +111,19 @@
           <div class="canvas-loader" id="canvas-loader" role="status" aria-live="polite" aria-label="Loading">
             <span class="spinner" aria-hidden="true"></span>
           </div>
+          <section class="failures-panel" id="failures-panel" role="region" aria-label="Errors" hidden>
+            <header class="failures-header">
+              <div class="failures-title">
+                <span class="failures-count" id="failures-count"></span>
+                <span class="failures-subtitle">couldn't be watermarked</span>
+              </div>
+              <div class="failures-actions">
+                <button class="failures-btn" id="failures-copy" type="button">Copy</button>
+                <button class="failures-btn" id="failures-close" type="button" aria-label="Close">Close</button>
+              </div>
+            </header>
+            <ul class="failures-list" id="failures-list"></ul>
+          </section>
         </div>
       </section>
 
